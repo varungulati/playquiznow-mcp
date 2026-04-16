@@ -1,0 +1,26 @@
+# Smithery.ai configuration for MCP server discovery
+# https://smithery.ai/docs/config
+
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      PLAYQUIZNOW_API_KEY:
+        type: string
+        description: "Your PlayQuizNow API key (starts with pqn_). Generate at https://playquiznow.com/api-keys"
+      PLAYQUIZNOW_BASE_URL:
+        type: string
+        description: "API base URL (defaults to https://api.playquiznow.com)"
+        default: "https://api.playquiznow.com"
+    required:
+      - PLAYQUIZNOW_API_KEY
+  commandFunction: |
+    (config) => ({
+      command: "uvx",
+      args: ["playquiznow-mcp"],
+      env: {
+        PLAYQUIZNOW_API_KEY: config.PLAYQUIZNOW_API_KEY,
+        PLAYQUIZNOW_BASE_URL: config.PLAYQUIZNOW_BASE_URL || "https://api.playquiznow.com"
+      }
+    })

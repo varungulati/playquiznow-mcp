@@ -1,0 +1,36 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.playquiznow/quiz",
+  "description": "MCP server for PlayQuizNow — create and manage quizzes from AI tools like Claude Desktop. Supports multiple choice, polls, text answers, timed quizzes, negative marking, and scheduling.",
+  "repository": {
+    "url": "https://github.com/playquiznow/playquiznow-mcp",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "playquiznow-mcp",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "PLAYQUIZNOW_API_KEY",
+          "description": "Your PlayQuizNow API key (starts with pqn_). Generate at https://playquiznow.com/api-keys",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": true
+        },
+        {
+          "name": "PLAYQUIZNOW_BASE_URL",
+          "description": "API base URL. Defaults to https://api.playquiznow.com",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}
