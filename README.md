@@ -1,6 +1,6 @@
 # PlayQuizNow MCP Server
 
-[![PyPI](https://img.shields.io/pypi/v/playquiznow-mcp)](https://pypi.org/project/playquiznow-mcp/)
+[![npm](https://img.shields.io/npm/v/playquiznow-mcp)](https://www.npmjs.com/package/playquiznow-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 An [MCP (Model Context Protocol)](https://modelcontextprotocol.io) server for [PlayQuizNow](https://playquiznow.com) — the online quiz platform for education, training, and live events.
@@ -40,8 +40,8 @@ Add to your [`claude_desktop_config.json`](https://claude.ai/docs/claude-desktop
 {
   "mcpServers": {
     "playquiznow": {
-      "command": "uvx",
-      "args": ["playquiznow-mcp"],
+      "command": "npx",
+      "args": ["-y", "playquiznow-mcp"],
       "env": {
         "PLAYQUIZNOW_API_KEY": "pqn_your_key_here"
       }
@@ -50,7 +50,7 @@ Add to your [`claude_desktop_config.json`](https://claude.ai/docs/claude-desktop
 }
 ```
 
-Restart Claude Desktop. You're ready to create quizzes.
+Restart Claude Desktop. You're ready to create quizzes — no additional installs needed (Node/npx ships with Claude Desktop's launcher).
 
 ### 3. Try it
 
@@ -110,10 +110,18 @@ The `create_quiz` tool supports all quiz configuration options:
 ```bash
 git clone https://github.com/playquiznow/playquiznow-mcp.git
 cd playquiznow-mcp
-pip install -e .
+npm install
+npm run build
 
 # Run locally against a dev server
-PLAYQUIZNOW_API_KEY=pqn_... PLAYQUIZNOW_BASE_URL=http://localhost:8000 playquiznow-mcp
+PLAYQUIZNOW_API_KEY=pqn_... PLAYQUIZNOW_BASE_URL=http://localhost:8000 node dist/index.js
+```
+
+### Publishing
+
+```bash
+npm login
+npm publish   # runs prepublishOnly → tsc → publishes
 ```
 
 ## About PlayQuizNow

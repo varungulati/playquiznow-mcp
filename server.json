@@ -9,7 +9,7 @@
   "version": "0.1.0",
   "packages": [
     {
-      "registryType": "pypi",
+      "registryType": "npm",
       "identifier": "playquiznow-mcp",
       "version": "0.1.0",
       "transport": {

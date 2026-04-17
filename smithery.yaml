@@ -17,8 +17,8 @@ startCommand:
       - PLAYQUIZNOW_API_KEY
   commandFunction: |
     (config) => ({
-      command: "uvx",
-      args: ["playquiznow-mcp"],
+      command: "npx",
+      args: ["-y", "playquiznow-mcp"],
       env: {
         PLAYQUIZNOW_API_KEY: config.PLAYQUIZNOW_API_KEY,
         PLAYQUIZNOW_BASE_URL: config.PLAYQUIZNOW_BASE_URL || "https://api.playquiznow.com"

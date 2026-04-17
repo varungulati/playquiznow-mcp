@@ -1,0 +1,51 @@
+{
+  "name": "playquiznow-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for PlayQuizNow — create and manage quizzes from AI tools like Claude Desktop",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "playquiznow-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc && chmod +x dist/index.js",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run build",
+    "start": "node dist/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "quiz",
+    "education",
+    "playquiznow",
+    "ai",
+    "claude",
+    "claude-desktop"
+  ],
+  "author": "PlayQuizNow <support@playquiznow.com>",
+  "license": "MIT",
+  "homepage": "https://playquiznow.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/playquiznow/playquiznow-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/playquiznow/playquiznow-mcp/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0"
+  }
+}
