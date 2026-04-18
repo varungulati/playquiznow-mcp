@@ -326,16 +326,19 @@ async function handleCreateQuiz(client: PlayQuizNowClient, args: Record<string, 
       0,
     )
 
+    const quizMode = args.quiz_mode ?? "single_player"
+    const playPath = quizMode === "multi_player" ? "play-multiplayer" : "play-quiz"
+
     const lines = [
       "Quiz created successfully!\n",
       `- **Title:** ${title}`,
       `- **Join Code:** ${joinCode}`,
       `- **Questions:** ${totalQuestions}`,
-      `- **Mode:** ${args.quiz_mode ?? "single_player"}`,
+      `- **Mode:** ${quizMode}`,
       `- **Access:** ${args.access_type ?? "public"}`,
     ]
     if (args.negative_marking) lines.push("- **Negative Marking:** enabled")
-    lines.push(`\nPlayers can join at: https://playquiznow.com/play/${joinCode}`)
+    lines.push(`\nPlayers can join at: https://playquiznow.com/${playPath}/${joinCode}`)
 
     return [{ type: "text", text: lines.join("\n") }]
   }
