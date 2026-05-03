@@ -121,4 +121,15 @@ export class PlayQuizNowClient {
       headers: { Authorization: `Bearer ${this.apiKey}` },
     })
   }
+
+  async updateQuiz(quizId: number, fields: Record<string, any>): Promise<ParsedResponse> {
+    return this.request(`/api/quiz/update-metadata/${quizId}/`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(fields),
+    })
+  }
 }

@@ -196,6 +196,93 @@ const DELETE_QUIZ_SCHEMA = {
   required: ["quiz_id"],
 } as const
 
+const UPDATE_QUIZ_SCHEMA = {
+  type: "object",
+  properties: {
+    quiz_id: {
+      type: "integer",
+      description: "The ID of the quiz to update",
+    },
+    title: {
+      type: "string",
+      description: "New quiz title (1-200 chars). Whitespace-only titles are rejected.",
+      minLength: 1,
+      maxLength: 200,
+    },
+    description: {
+      type: "string",
+      description: "New quiz description shown to players before starting. Plain text.",
+    },
+    access_type: {
+      type: "string",
+      enum: ["public", "private", "unlisted"],
+      description:
+        "public = anyone can find and play, private = only via direct link, unlisted = not listed but accessible via link",
+    },
+    quiz_mode: {
+      type: "string",
+      enum: ["single_player", "multi_player"],
+      description: "single_player = players take quiz individually, multi_player = live multiplayer session",
+    },
+    auto_start_quiz: {
+      type: "boolean",
+      description: "Automatically start the quiz for participants (no waiting room)",
+    },
+    negative_marking: {
+      type: "boolean",
+      description: "Deduct points for wrong answers (uses each question's negative_points value)",
+    },
+    start_datetime: {
+      type: ["string", "null"],
+      description:
+        "ISO 8601 datetime when quiz becomes available. Pass null to clear. If both start and end are set, end must be strictly after start.",
+    },
+    end_datetime: {
+      type: ["string", "null"],
+      description: "ISO 8601 datetime when quiz closes. Pass null to clear (no close time).",
+    },
+    max_plays_per_participant: {
+      type: ["integer", "null"],
+      description:
+        "Maximum number of times each player can take this quiz (>= 1). Pass null to clear. Subject to subscription plan limits.",
+      minimum: 1,
+    },
+    marketing_text: {
+      type: ["string", "null"],
+      description: "Custom text shown on the quiz results page. Pass null to clear.",
+    },
+    marketing_link: {
+      type: ["string", "null"],
+      description: "URL linked from the marketing text on the results page. Must be a valid URL. Pass null to clear.",
+    },
+  },
+  required: ["quiz_id"],
+} as const
+
+const UPDATE_QUIZ_DESCRIPTION =
+  "Update metadata fields of an existing quiz on PlayQuizNow. Only the quiz owner can update. " +
+  "Pass quiz_id plus any subset of editable fields — omitted fields are left unchanged. " +
+  "Editable fields: title, description, access_type, quiz_mode, auto_start_quiz, " +
+  "negative_marking, start_datetime, end_datetime, max_plays_per_participant, " +
+  "marketing_text, marketing_link. " +
+  "The join_code is immutable. Question sets, questions, and answers cannot be edited " +
+  "through this tool — they require deleting and recreating the quiz. " +
+  "Returns the updated quiz with a list of which fields actually changed."
+
+const UPDATE_QUIZ_EDITABLE_FIELDS = [
+  "title",
+  "description",
+  "access_type",
+  "quiz_mode",
+  "auto_start_quiz",
+  "negative_marking",
+  "start_datetime",
+  "end_datetime",
+  "max_plays_per_participant",
+  "marketing_text",
+  "marketing_link",
+] as const
+
 const TOOLS: Tool[] = [
   {
     name: "create_quiz",
@@ -219,6 +306,11 @@ const TOOLS: Tool[] = [
     name: "delete_quiz",
     description: "Delete a quiz by its ID. Only the quiz owner can delete it.",
     inputSchema: DELETE_QUIZ_SCHEMA as unknown as Tool["inputSchema"],
+  },
+  {
+    name: "update_quiz",
+    description: UPDATE_QUIZ_DESCRIPTION,
+    inputSchema: UPDATE_QUIZ_SCHEMA as unknown as Tool["inputSchema"],
   },
 ]
 
@@ -393,6 +485,93 @@ async function handleGetQuiz(client: PlayQuizNowClient, args: Record<string, any
   return [{ type: "text", text: `Quiz details for ${joinCode}:\n\n\`\`\`json\n${text}\n\`\`\`` }]
 }
 
+function formatDrfFieldErrors(errors: unknown): string {
+  if (typeof errors === "string") return errors
+  if (errors && typeof errors === "object") {
+    const obj = errors as Record<string, unknown>
+    const parts: string[] = []
+    for (const [field, msg] of Object.entries(obj)) {
+      if (Array.isArray(msg)) {
+        parts.push(`${field}: ${msg.join(" ")}`)
+      } else if (typeof msg === "string") {
+        parts.push(`${field}: ${msg}`)
+      } else {
+        parts.push(`${field}: ${JSON.stringify(msg)}`)
+      }
+    }
+    if (parts.length > 0) return parts.join("; ")
+    return JSON.stringify(errors)
+  }
+  return String(errors ?? "Unknown error")
+}
+
+async function handleUpdateQuiz(client: PlayQuizNowClient, args: Record<string, any>): Promise<TextContent[]> {
+  const { quiz_id: quizId, ...rest } = args
+  if (typeof quizId !== "number" && typeof quizId !== "string") {
+    return [{ type: "text", text: "Validation error: quiz_id is required." }]
+  }
+
+  // Build the payload: only include keys the caller actually supplied. For
+  // nullable fields, explicit null is preserved (means "clear this field").
+  // For non-nullable fields, undefined drops them; explicit null is forwarded
+  // and rejected server-side with a clear message.
+  const payload: Record<string, any> = {}
+  for (const [key, value] of Object.entries(rest)) {
+    if (value === undefined) continue
+    payload[key] = value
+  }
+
+  const editableSubmitted = Object.keys(payload).filter((k) =>
+    (UPDATE_QUIZ_EDITABLE_FIELDS as readonly string[]).includes(k),
+  )
+  const otherSubmitted = Object.keys(payload).filter(
+    (k) => !(UPDATE_QUIZ_EDITABLE_FIELDS as readonly string[]).includes(k),
+  )
+
+  // Reject question-set keys client-side too so the error is consistent
+  // regardless of which transport reaches the server.
+  for (const k of otherSubmitted) {
+    if (["question_sets", "questionset", "questions", "answers", "answer"].includes(k)) {
+      return [
+        {
+          type: "text",
+          text:
+            `Validation error: ${k}: Question sets cannot be edited through update_quiz. ` +
+            `This tool only updates quiz metadata.`,
+        },
+      ]
+    }
+  }
+
+  if (editableSubmitted.length === 0 && otherSubmitted.length === 0) {
+    return [
+      {
+        type: "text",
+        text: "Validation error: No editable fields supplied. Provide at least one field to update.",
+      },
+    ]
+  }
+
+  const result = await client.updateQuiz(Number(quizId), payload)
+
+  if (result.status) {
+    const r = result as Record<string, any>
+    const updatedFields = Array.isArray(r.updated_fields) ? (r.updated_fields as string[]) : []
+    const lines = [
+      `Quiz ${r.quiz_id} updated successfully.\n`,
+      `- **Title:** ${r.title}`,
+      `- **Join Code:** ${r.join_code}`,
+      `- **URL:** ${r.url}`,
+      `- **Mode:** ${r.mode ?? "—"}`,
+      `- **Access:** ${r.access ?? "—"}`,
+      `- **Fields changed:** ${updatedFields.length === 0 ? "(none — values matched stored)" : updatedFields.join(", ")}`,
+    ]
+    return [{ type: "text", text: lines.join("\n") }]
+  }
+
+  return [{ type: "text", text: `Failed to update quiz: ${formatDrfFieldErrors(result.errors)}` }]
+}
+
 async function handleDeleteQuiz(client: PlayQuizNowClient, args: Record<string, any>): Promise<TextContent[]> {
   const quizId = Number(args.quiz_id)
   const result = await client.deleteQuiz(quizId)
@@ -421,6 +600,8 @@ export function registerQuizTools(server: Server, client: PlayQuizNowClient): vo
           return { content: await handleGetQuiz(client, args) }
         case "delete_quiz":
           return { content: await handleDeleteQuiz(client, args) }
+        case "update_quiz":
+          return { content: await handleUpdateQuiz(client, args) }
         default:
           return { content: [{ type: "text", text: `Unknown tool: ${name}` }] }
       }

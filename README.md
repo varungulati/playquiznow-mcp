@@ -14,7 +14,14 @@ This server lets AI assistants like **Claude Desktop**, **Claude Code**, and oth
 | `create_quiz` | Create a quiz with questions, answers, timing, scoring, and access controls |
 | `list_my_quizzes` | List all quizzes you've created |
 | `get_quiz` | Get full quiz details by join code |
+| `update_quiz` | Edit an existing quiz's metadata (title, description, access, schedule, etc.) — keeps the join code |
 | `delete_quiz` | Delete a quiz by ID |
+
+#### `update_quiz` — what's editable
+
+Pass `quiz_id` plus any subset of: `title`, `description`, `access_type`, `quiz_mode`, `auto_start_quiz`, `negative_marking`, `start_datetime`, `end_datetime`, `max_plays_per_participant`, `marketing_text`, `marketing_link`. Omitted fields stay unchanged. The `join_code` is permanent and never changes.
+
+**Question sets, questions, and answers are NOT editable** through `update_quiz` — to change those, delete the quiz and create a new one. (This loses the join code, leaderboard, and play history.)
 
 ### Example prompts
 
@@ -25,6 +32,8 @@ Once connected, just ask your AI assistant:
 - *"Create a quiz about climate change with negative marking for wrong answers"*
 - *"List my quizzes"*
 - *"Show me the details of quiz ABC123"*
+- *"Change the description of quiz 574 to 'Updated Q3 onboarding quiz'"*
+- *"Make quiz 612 private and set it to close on 2026-12-31"*
 
 ## Quick Start
 
