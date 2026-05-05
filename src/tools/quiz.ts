@@ -283,12 +283,68 @@ const UPDATE_QUIZ_EDITABLE_FIELDS = [
   "marketing_link",
 ] as const
 
+const SHUFFLE_QUIZ_ANSWERS_SCHEMA = {
+  type: "object",
+  properties: {
+    quiz_id: {
+      type: "integer",
+      description: "The quiz ID whose answers should be shuffled.",
+    },
+  },
+  required: ["quiz_id"],
+} as const
+
+const SET_QUIZ_IMAGE_SCHEMA = {
+  type: "object",
+  properties: {
+    quiz_id: {
+      type: "integer",
+      description: "The quiz ID to update.",
+    },
+    image_url: {
+      type: ["string", "null"],
+      description:
+        "Public http(s) URL of the image to set as the quiz banner. Server downloads the image, validates content-type and size, uploads to S3, and stores the resulting path. Pass null to clear the existing image. Allowed types: png, jpeg, gif, webp. Max 10MB.",
+    },
+  },
+  required: ["quiz_id", "image_url"],
+} as const
+
+const SET_QUESTION_IMAGES_SCHEMA = {
+  type: "object",
+  properties: {
+    quiz_id: {
+      type: "integer",
+      description: "The quiz ID whose questions should be updated.",
+    },
+    image_url: {
+      type: "string",
+      description:
+        "Public http(s) URL of the image to attach to questions. Server downloads it ONCE and assigns the same S3 path to every matching question. Allowed types: png, jpeg, gif, webp. Max 10MB.",
+    },
+    only_if_empty: {
+      type: "boolean",
+      description:
+        "If true (default), only update questions that don't already have an attachment. If false, overwrite existing attachments too.",
+      default: true,
+    },
+    question_ids: {
+      type: "array",
+      description:
+        "Optional. Restrict the update to these specific question IDs (must belong to the quiz). If omitted, applies to all matching questions in the quiz.",
+      items: { type: "integer" },
+    },
+  },
+  required: ["quiz_id", "image_url"],
+} as const
+
 const TOOLS: Tool[] = [
   {
     name: "create_quiz",
     description:
       "Create a new quiz on PlayQuizNow. Provide a title and one or more question sets, each containing questions with answer options. " +
       "For multiple-choice questions (mcq_text), mark at least one answer as correct. Use plain text for question/answer text (not HTML). " +
+      "The correct answer's display position is randomized automatically — you don't need to shuffle the answers array yourself. " +
       `Returns the quiz join code and URL. Limits: max ${MAX_TOTAL_QUESTIONS} questions total, max ${MAX_QUESTION_SETS} question sets.`,
     inputSchema: CREATE_QUIZ_SCHEMA as unknown as Tool["inputSchema"],
   },
@@ -311,6 +367,31 @@ const TOOLS: Tool[] = [
     name: "update_quiz",
     description: UPDATE_QUIZ_DESCRIPTION,
     inputSchema: UPDATE_QUIZ_SCHEMA as unknown as Tool["inputSchema"],
+  },
+  {
+    name: "shuffle_quiz_answers",
+    description:
+      "Randomize the display position of answers for every multiple-choice question in a quiz, in-place. " +
+      "Use this to fix legacy quizzes where the correct answer always appears first (e.g. position A). " +
+      "Answer IDs are preserved, so existing play history (UserQuizResult rows) stays valid — only the rendered order changes. " +
+      "Quiz-level join codes and metadata are untouched. Only the quiz owner can run this.",
+    inputSchema: SHUFFLE_QUIZ_ANSWERS_SCHEMA as unknown as Tool["inputSchema"],
+  },
+  {
+    name: "set_quiz_image",
+    description:
+      "Set (or clear) the quiz banner image by URL. The server downloads the image from `image_url`, validates that it's a real image (png/jpeg/gif/webp, ≤10MB) from a public host, uploads it to S3, and saves the resulting path on the quiz. " +
+      "Pass image_url=null to clear an existing image. Only the quiz owner can run this.",
+    inputSchema: SET_QUIZ_IMAGE_SCHEMA as unknown as Tool["inputSchema"],
+  },
+  {
+    name: "set_question_images",
+    description:
+      "Apply one image to many questions in a quiz at once (e.g. add a banner to every question that doesn't have one). " +
+      "Server downloads the image ONCE, uploads it to S3, then assigns that path to every matching question. " +
+      "By default (only_if_empty=true), questions that already have an attachment are skipped. Pass only_if_empty=false to overwrite. " +
+      "Use question_ids to restrict the update to specific questions. Only the quiz owner can run this.",
+    inputSchema: SET_QUESTION_IMAGES_SCHEMA as unknown as Tool["inputSchema"],
   },
 ]
 
@@ -360,26 +441,49 @@ function validateQuizData(args: Record<string, any>): string | null {
   return null
 }
 
+// Fisher-Yates in-place shuffle. Used so the correct answer for an mcq_text
+// question lands at a random position instead of always position 0 (which is
+// the natural authoring bias when a tool/LLM lists the correct answer first).
+// Position 0 gets serialized to the first/lowest answer ID server-side, which
+// then becomes "option A" on the rendered quiz — making the quiz trivial.
+function shuffleInPlace<T>(arr: T[]): T[] {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+  }
+  return arr
+}
+
 function transformQuestionSets(questionSets: any[]): any[] {
   return questionSets.map((qs) => ({
     title: qs.title,
     description: qs.description ?? "",
     passage: qs.passage ?? "",
-    questions: (qs.questions ?? []).map((q: any) => ({
-      text: q.text,
-      question_type: q.question_type ?? "mcq_text",
-      positive_points: q.positive_points ?? 1,
-      negative_points: q.negative_points ?? 0,
-      time_for_question: q.time_for_question ?? 30,
-      time_for_answer: q.time_for_answer ?? 10,
-      correct_answer_explanation: q.correct_answer_explanation ?? "",
-      attachment: null,
-      answer: (q.answers ?? []).map((a: any) => ({
+    questions: (qs.questions ?? []).map((q: any) => {
+      const qType = q.question_type ?? "mcq_text"
+      const rawAnswers = (q.answers ?? []).map((a: any) => ({
         text: a.text,
         is_correct: a.is_correct ?? false,
         attachment: null,
-      })),
-    })),
+      }))
+      // Only randomize for mcq_text. Polls have no "correct" answer to hide,
+      // and text_answer questions use a single-row expected-answer convention
+      // where reordering would be meaningless.
+      const answers = qType === "mcq_text" && rawAnswers.length > 1
+        ? shuffleInPlace([...rawAnswers])
+        : rawAnswers
+      return {
+        text: q.text,
+        question_type: qType,
+        positive_points: q.positive_points ?? 1,
+        negative_points: q.negative_points ?? 0,
+        time_for_question: q.time_for_question ?? 30,
+        time_for_answer: q.time_for_answer ?? 10,
+        correct_answer_explanation: q.correct_answer_explanation ?? "",
+        attachment: null,
+        answer: answers,
+      }
+    }),
   }))
 }
 
@@ -572,6 +676,100 @@ async function handleUpdateQuiz(client: PlayQuizNowClient, args: Record<string, 
   return [{ type: "text", text: `Failed to update quiz: ${formatDrfFieldErrors(result.errors)}` }]
 }
 
+async function handleShuffleQuizAnswers(
+  client: PlayQuizNowClient,
+  args: Record<string, any>,
+): Promise<TextContent[]> {
+  const quizId = Number(args.quiz_id)
+  if (!Number.isFinite(quizId) || quizId <= 0) {
+    return [{ type: "text", text: "Validation error: quiz_id must be a positive integer." }]
+  }
+  const result = await client.shuffleQuizAnswers(quizId)
+  if (result.status) {
+    const r = result as Record<string, any>
+    const lines = [
+      `Quiz ${r.quiz_id} (${r.join_code}) — answer positions shuffled.`,
+      `- **Questions shuffled:** ${r.questions_shuffled ?? 0}`,
+      `- **Answers repositioned:** ${r.answers_repositioned ?? 0}`,
+    ]
+    return [{ type: "text", text: lines.join("\n") }]
+  }
+  return [{ type: "text", text: `Failed to shuffle answers: ${formatDrfFieldErrors(result.errors)}` }]
+}
+
+async function handleSetQuizImage(
+  client: PlayQuizNowClient,
+  args: Record<string, any>,
+): Promise<TextContent[]> {
+  const quizId = Number(args.quiz_id)
+  if (!Number.isFinite(quizId) || quizId <= 0) {
+    return [{ type: "text", text: "Validation error: quiz_id must be a positive integer." }]
+  }
+  const imageUrl = args.image_url
+  if (imageUrl !== null && typeof imageUrl !== "string") {
+    return [
+      {
+        type: "text",
+        text: "Validation error: image_url must be a string URL or null (to clear).",
+      },
+    ]
+  }
+  const result = await client.setQuizImage(quizId, imageUrl)
+  if (result.status) {
+    const r = result as Record<string, any>
+    const lines = [
+      `Quiz ${r.quiz_id} — image ${imageUrl ? "updated" : "cleared"}.`,
+      `- **Image:** ${r.image ?? "(none)"}`,
+    ]
+    return [{ type: "text", text: lines.join("\n") }]
+  }
+  return [{ type: "text", text: `Failed to set quiz image: ${formatDrfFieldErrors(result.errors)}` }]
+}
+
+async function handleSetQuestionImages(
+  client: PlayQuizNowClient,
+  args: Record<string, any>,
+): Promise<TextContent[]> {
+  const quizId = Number(args.quiz_id)
+  if (!Number.isFinite(quizId) || quizId <= 0) {
+    return [{ type: "text", text: "Validation error: quiz_id must be a positive integer." }]
+  }
+  const imageUrl = args.image_url
+  if (typeof imageUrl !== "string" || imageUrl.length === 0) {
+    return [{ type: "text", text: "Validation error: image_url is required." }]
+  }
+  const body: { image_url: string; only_if_empty?: boolean; question_ids?: number[] } = {
+    image_url: imageUrl,
+  }
+  if (typeof args.only_if_empty === "boolean") body.only_if_empty = args.only_if_empty
+  if (Array.isArray(args.question_ids)) {
+    const ids: number[] = []
+    for (const id of args.question_ids) {
+      const n = Number(id)
+      if (!Number.isInteger(n) || n <= 0) {
+        return [{ type: "text", text: "Validation error: question_ids must be positive integers." }]
+      }
+      ids.push(n)
+    }
+    body.question_ids = ids
+  }
+
+  const result = await client.setQuestionImages(quizId, body)
+  if (result.status) {
+    const r = result as Record<string, any>
+    const lines = [
+      `Quiz ${r.quiz_id} (${r.join_code ?? "—"}) — question images updated.`,
+      `- **Questions updated:** ${r.questions_updated ?? 0}`,
+      `- **Image:** ${r.image ?? "(none)"}`,
+    ]
+    if (r.skipped_existing) lines.push(`- **Skipped questions with existing attachments:** yes`)
+    return [{ type: "text", text: lines.join("\n") }]
+  }
+  return [
+    { type: "text", text: `Failed to set question images: ${formatDrfFieldErrors(result.errors)}` },
+  ]
+}
+
 async function handleDeleteQuiz(client: PlayQuizNowClient, args: Record<string, any>): Promise<TextContent[]> {
   const quizId = Number(args.quiz_id)
   const result = await client.deleteQuiz(quizId)
@@ -602,6 +800,12 @@ export function registerQuizTools(server: Server, client: PlayQuizNowClient): vo
           return { content: await handleDeleteQuiz(client, args) }
         case "update_quiz":
           return { content: await handleUpdateQuiz(client, args) }
+        case "shuffle_quiz_answers":
+          return { content: await handleShuffleQuizAnswers(client, args) }
+        case "set_quiz_image":
+          return { content: await handleSetQuizImage(client, args) }
+        case "set_question_images":
+          return { content: await handleSetQuestionImages(client, args) }
         default:
           return { content: [{ type: "text", text: `Unknown tool: ${name}` }] }
       }

@@ -4,6 +4,16 @@ All notable changes to `playquiznow-mcp` are documented here.
 
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] — 2026-05-05
+
+### Added
+- **`shuffle_quiz_answers` tool** — randomize the display position of answers across every multiple-choice question in a quiz, in-place. Answer IDs are preserved, so existing play history (UserQuizResult rows) stays intact. Use this to fix legacy quizzes where the correct answer always rendered at position A. Requires backend with `POST /api/quiz/<id>/shuffle-answers/` endpoint.
+- **`set_quiz_image` tool** — set (or clear) the quiz banner image by URL. The server downloads the image, validates content-type and size (png/jpeg/gif/webp, ≤10MB), uploads to S3, and saves the path on the quiz. Requires backend with `POST /api/quiz/<id>/set-image/` endpoint.
+- **`set_question_images` tool** — apply one image to many questions at once (e.g. add a banner to every question that doesn't have one). Server downloads the image once, then assigns the same S3 path to every matching question. Supports `only_if_empty` and `question_ids` filters. Requires backend with `POST /api/quiz/<id>/set-question-images/` endpoint.
+
+### Changed
+- **`create_quiz`** — the correct answer's display position is now randomized automatically before being sent to the backend. Previously, listing the correct answer first in the `answers` array (a natural authoring bias) caused all correct answers to land at position A on the rendered quiz.
+
 ## [0.2.0] — 2026-05-03
 
 ### Added

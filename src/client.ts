@@ -132,4 +132,36 @@ export class PlayQuizNowClient {
       body: JSON.stringify(fields),
     })
   }
+
+  async shuffleQuizAnswers(quizId: number): Promise<ParsedResponse> {
+    return this.request(`/api/quiz/${quizId}/shuffle-answers/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${this.apiKey}` },
+    })
+  }
+
+  async setQuizImage(quizId: number, imageUrl: string | null): Promise<ParsedResponse> {
+    return this.request(`/api/quiz/${quizId}/set-image/`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ image_url: imageUrl }),
+    })
+  }
+
+  async setQuestionImages(
+    quizId: number,
+    body: { image_url: string; only_if_empty?: boolean; question_ids?: number[] },
+  ): Promise<ParsedResponse> {
+    return this.request(`/api/quiz/${quizId}/set-question-images/`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    })
+  }
 }
