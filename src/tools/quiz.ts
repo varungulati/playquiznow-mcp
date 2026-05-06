@@ -310,6 +310,39 @@ const SET_QUIZ_IMAGE_SCHEMA = {
   required: ["quiz_id", "image_url"],
 } as const
 
+const SET_QUESTION_TIMING_SCHEMA = {
+  type: "object",
+  properties: {
+    quiz_id: {
+      type: "integer",
+      description: "The quiz ID whose questions to update.",
+    },
+    time_for_question: {
+      type: ["integer", "null"],
+      description:
+        "New seconds-to-answer for each targeted question (5-300). Pass null or omit to leave this field unchanged. " +
+        "At least one of time_for_question / time_for_answer must be provided.",
+      minimum: 5,
+      maximum: 300,
+    },
+    time_for_answer: {
+      type: ["integer", "null"],
+      description:
+        "New seconds-to-display the answer/explanation after answering (3-60). Pass null or omit to leave this field unchanged.",
+      minimum: 3,
+      maximum: 60,
+    },
+    question_ids: {
+      type: "array",
+      description:
+        "Optional. Restrict the update to these specific question IDs (must belong to the quiz). " +
+        "If omitted, applies to ALL questions in the quiz.",
+      items: { type: "integer" },
+    },
+  },
+  required: ["quiz_id"],
+} as const
+
 const SET_QUESTION_IMAGES_SCHEMA = {
   type: "object",
   properties: {
@@ -387,6 +420,15 @@ const TOOLS: Tool[] = [
       "Set (or clear) the quiz banner image by URL. The server downloads the image from `image_url`, validates that it's a real image (png/jpeg/gif/webp, ≤10MB) from a public host, uploads it to S3, and saves the resulting path on the quiz. " +
       "Pass image_url=null to clear an existing image. Only the quiz owner can run this.",
     inputSchema: SET_QUIZ_IMAGE_SCHEMA as unknown as Tool["inputSchema"],
+  },
+  {
+    name: "set_question_timing",
+    description:
+      "Bulk-update the timing fields on a quiz's questions: time_for_question (seconds to answer, 5-300) and/or time_for_answer (seconds to display the explanation, 3-60). " +
+      "At least one of the two timing fields must be provided; the other is left unchanged. " +
+      "Use question_ids to restrict to specific questions, or omit to apply to ALL questions in the quiz. " +
+      "Only the quiz owner can run this. Returns questions_updated and the list of fields that were changed.",
+    inputSchema: SET_QUESTION_TIMING_SCHEMA as unknown as Tool["inputSchema"],
   },
   {
     name: "set_question_images",
@@ -731,6 +773,84 @@ async function handleSetQuizImage(
   return [{ type: "text", text: `Failed to set quiz image: ${formatDrfFieldErrors(result.errors)}` }]
 }
 
+async function handleSetQuestionTiming(
+  client: PlayQuizNowClient,
+  args: Record<string, any>,
+): Promise<TextContent[]> {
+  const quizId = Number(args.quiz_id)
+  if (!Number.isFinite(quizId) || quizId <= 0) {
+    return [{ type: "text", text: "Validation error: quiz_id must be a positive integer." }]
+  }
+
+  // Treat null and undefined as "not provided" — same semantics as omission.
+  const tfqRaw = args.time_for_question
+  const tfaRaw = args.time_for_answer
+  const tfqProvided = tfqRaw !== undefined && tfqRaw !== null
+  const tfaProvided = tfaRaw !== undefined && tfaRaw !== null
+
+  if (!tfqProvided && !tfaProvided) {
+    return [
+      {
+        type: "text",
+        text:
+          "Validation error: at least one of time_for_question or time_for_answer must be provided.",
+      },
+    ]
+  }
+
+  const body: { time_for_question?: number; time_for_answer?: number; question_ids?: number[] } = {}
+
+  if (tfqProvided) {
+    if (!Number.isInteger(tfqRaw) || tfqRaw < 5 || tfqRaw > 300) {
+      return [
+        {
+          type: "text",
+          text: "Validation error: time_for_question must be an integer between 5 and 300.",
+        },
+      ]
+    }
+    body.time_for_question = tfqRaw
+  }
+  if (tfaProvided) {
+    if (!Number.isInteger(tfaRaw) || tfaRaw < 3 || tfaRaw > 60) {
+      return [
+        {
+          type: "text",
+          text: "Validation error: time_for_answer must be an integer between 3 and 60.",
+        },
+      ]
+    }
+    body.time_for_answer = tfaRaw
+  }
+
+  if (Array.isArray(args.question_ids)) {
+    const ids: number[] = []
+    for (const id of args.question_ids) {
+      const n = Number(id)
+      if (!Number.isInteger(n) || n <= 0) {
+        return [{ type: "text", text: "Validation error: question_ids must be positive integers." }]
+      }
+      ids.push(n)
+    }
+    body.question_ids = ids
+  }
+
+  const result = await client.setQuestionTiming(quizId, body)
+  if (result.status) {
+    const r = result as Record<string, any>
+    const fields = Array.isArray(r.fields_changed) ? (r.fields_changed as string[]) : []
+    const lines = [
+      `Quiz ${r.quiz_id} (${r.join_code ?? "—"}) — question timing updated.`,
+      `- **Questions updated:** ${r.questions_updated ?? 0}`,
+      `- **Fields changed:** ${fields.length === 0 ? "(none)" : fields.join(", ")}`,
+    ]
+    return [{ type: "text", text: lines.join("\n") }]
+  }
+  return [
+    { type: "text", text: `Failed to set question timing: ${formatDrfFieldErrors(result.errors)}` },
+  ]
+}
+
 async function handleSetQuestionImages(
   client: PlayQuizNowClient,
   args: Record<string, any>,
@@ -822,6 +942,8 @@ export function registerQuizTools(server: Server, client: PlayQuizNowClient): vo
           return { content: await handleSetQuizImage(client, args) }
         case "set_question_images":
           return { content: await handleSetQuestionImages(client, args) }
+        case "set_question_timing":
+          return { content: await handleSetQuestionTiming(client, args) }
         default:
           return { content: [{ type: "text", text: `Unknown tool: ${name}` }] }
       }

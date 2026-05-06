@@ -4,6 +4,11 @@ All notable changes to `playquiznow-mcp` are documented here.
 
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] — 2026-05-06
+
+### Added
+- **`set_question_timing` tool** — bulk-update `time_for_question` and/or `time_for_answer` on questions within a quiz. At least one of the two timing fields must be provided; the other is left unchanged. Use `question_ids` to scope the update or omit to apply to every question. Owner-only. Returns `questions_updated` and `fields_changed`. Requires backend with `POST /api/quiz/<id>/set-question-timing/` endpoint.
+
 ## [0.3.1] — 2026-05-06
 
 ### Changed
