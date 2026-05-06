@@ -318,14 +318,18 @@ const SET_QUESTION_IMAGES_SCHEMA = {
       description: "The quiz ID whose questions should be updated.",
     },
     image_url: {
-      type: "string",
+      type: ["string", "null"],
       description:
-        "Public http(s) URL of the image to attach to questions. Server downloads it ONCE and assigns the same S3 path to every matching question. Allowed types: png, jpeg, gif, webp. Max 10MB.",
+        "Public http(s) URL of the image to attach to questions, or null to clear existing question images. " +
+        "When a URL is given, the server downloads it ONCE and assigns the same S3 path to every matching question. " +
+        "Allowed types: png, jpeg, gif, webp. Max 10MB. " +
+        "When null, only_if_empty is ignored — the operation clears attachments on every targeted question that currently has one.",
     },
     only_if_empty: {
       type: "boolean",
       description:
-        "If true (default), only update questions that don't already have an attachment. If false, overwrite existing attachments too.",
+        "If true (default), only update questions that don't already have an attachment. If false, overwrite existing attachments too. " +
+        "Ignored when image_url is null (clear mode).",
       default: true,
     },
     question_ids: {
@@ -387,9 +391,10 @@ const TOOLS: Tool[] = [
   {
     name: "set_question_images",
     description:
-      "Apply one image to many questions in a quiz at once (e.g. add a banner to every question that doesn't have one). " +
-      "Server downloads the image ONCE, uploads it to S3, then assigns that path to every matching question. " +
+      "Apply one image to many questions in a quiz at once, OR clear existing question images. " +
+      "Pass image_url=<URL> to set: server downloads the image ONCE, uploads it to S3, then assigns that path to every matching question. " +
       "By default (only_if_empty=true), questions that already have an attachment are skipped. Pass only_if_empty=false to overwrite. " +
+      "Pass image_url=null to clear: every targeted question with an existing attachment has its attachment cleared (only_if_empty is ignored in this mode). " +
       "Use question_ids to restrict the update to specific questions. Only the quiz owner can run this.",
     inputSchema: SET_QUESTION_IMAGES_SCHEMA as unknown as Tool["inputSchema"],
   },
@@ -734,11 +739,19 @@ async function handleSetQuestionImages(
   if (!Number.isFinite(quizId) || quizId <= 0) {
     return [{ type: "text", text: "Validation error: quiz_id must be a positive integer." }]
   }
-  const imageUrl = args.image_url
-  if (typeof imageUrl !== "string" || imageUrl.length === 0) {
-    return [{ type: "text", text: "Validation error: image_url is required." }]
+  if (!("image_url" in args)) {
+    return [{ type: "text", text: "Validation error: image_url is required (use null to clear)." }]
   }
-  const body: { image_url: string; only_if_empty?: boolean; question_ids?: number[] } = {
+  const imageUrl = args.image_url
+  if (imageUrl !== null && typeof imageUrl !== "string") {
+    return [
+      {
+        type: "text",
+        text: "Validation error: image_url must be a string URL or null (to clear).",
+      },
+    ]
+  }
+  const body: { image_url: string | null; only_if_empty?: boolean; question_ids?: number[] } = {
     image_url: imageUrl,
   }
   if (typeof args.only_if_empty === "boolean") body.only_if_empty = args.only_if_empty
@@ -757,12 +770,15 @@ async function handleSetQuestionImages(
   const result = await client.setQuestionImages(quizId, body)
   if (result.status) {
     const r = result as Record<string, any>
+    const action = imageUrl === null ? "cleared" : "updated"
     const lines = [
-      `Quiz ${r.quiz_id} (${r.join_code ?? "—"}) — question images updated.`,
-      `- **Questions updated:** ${r.questions_updated ?? 0}`,
+      `Quiz ${r.quiz_id} (${r.join_code ?? "—"}) — question images ${action}.`,
+      `- **Questions ${action}:** ${r.questions_updated ?? 0}`,
       `- **Image:** ${r.image ?? "(none)"}`,
     ]
-    if (r.skipped_existing) lines.push(`- **Skipped questions with existing attachments:** yes`)
+    if (imageUrl !== null && r.skipped_existing) {
+      lines.push(`- **Skipped questions with existing attachments:** yes`)
+    }
     return [{ type: "text", text: lines.join("\n") }]
   }
   return [

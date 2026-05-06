@@ -153,7 +153,7 @@ export class PlayQuizNowClient {
 
   async setQuestionImages(
     quizId: number,
-    body: { image_url: string; only_if_empty?: boolean; question_ids?: number[] },
+    body: { image_url: string | null; only_if_empty?: boolean; question_ids?: number[] },
   ): Promise<ParsedResponse> {
     return this.request(`/api/quiz/${quizId}/set-question-images/`, {
       method: "POST",
