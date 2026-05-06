@@ -4,6 +4,11 @@ All notable changes to `playquiznow-mcp` are documented here.
 
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] — 2026-05-06
+
+### Changed
+- **`set_question_images`** — `image_url` now accepts `null` to clear existing question attachments in bulk (mirrors `set_quiz_image`'s clear pattern). When clearing, `only_if_empty` is ignored and the operation restricts to questions that currently have an attachment, so the `questions_updated` count reflects real changes. Backwards-compatible: existing string-URL callers are unaffected. Requires backend with the matching clear-mode handler.
+
 ## [0.3.0] — 2026-05-05
 
 ### Added

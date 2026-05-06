@@ -35,7 +35,7 @@ async function main(): Promise<void> {
   process.stderr.write(`Starting PlayQuizNow MCP server (base_url=${baseUrl})\n`)
 
   const server = new Server(
-    { name: "playquiznow", version: "0.3.0" },
+    { name: "playquiznow", version: "0.3.1" },
     { capabilities: { tools: {} } },
   )
   const client = new PlayQuizNowClient(baseUrl, apiKey)
