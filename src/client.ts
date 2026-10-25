@@ -103,8 +103,14 @@ export class PlayQuizNowClient {
     })
   }
 
-  async listMyQuizzes(): Promise<ParsedResponse | unknown[]> {
-    return this.request("/api/quiz/my-quizzes/", {
+  async listMyQuizzes(params?: Record<string, string | number>): Promise<ParsedResponse | unknown[]> {
+    let path = "/api/quiz/my-quizzes/"
+    if (params && Object.keys(params).length > 0) {
+      const qs = new URLSearchParams()
+      for (const [k, v] of Object.entries(params)) qs.set(k, String(v))
+      path += `?${qs.toString()}`
+    }
+    return this.request(path, {
       headers: { Authorization: `Bearer ${this.apiKey}` },
     })
   }

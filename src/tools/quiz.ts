@@ -165,13 +165,73 @@ const CREATE_QUIZ_SCHEMA = {
       type: "string",
       description: "URL linked from the marketing text on the results page.",
     },
+    category: {
+      type: "string",
+      description:
+        "Quiz category slug. One of: kids-family, language-learning, holidays-occasions, geography, " +
+        "science, movies-tv, music, sports, history, business, technology, general-knowledge.",
+    },
+    age_group: {
+      type: "string",
+      enum: ["all_ages", "preschool", "kids_6_8", "kids_9_12", "teens", "adults"],
+      description:
+        "Target age group: preschool (3-5), kids_6_8, kids_9_12, teens (13-17), adults (18+), or all_ages.",
+    },
+    kid_safe: {
+      type: "boolean",
+      description:
+        "Whether the quiz content is suitable for kids. Defaults to FALSE — quizzes are not " +
+        "considered kid-safe unless explicitly set. Always set true for content made for children.",
+      default: false,
+    },
+    tags: {
+      type: "array",
+      items: { type: "string", maxLength: 30 },
+      maxItems: 10,
+      description:
+        "Up to 10 free-form tags, normalized server-side to lowercase slugs. " +
+        "Use for occasions and themes, e.g. christmas, new-year, halloween, spanish-a1.",
+    },
+    price: {
+      type: "number",
+      enum: [0, 5, 10, 20, 50, 100],
+      description:
+        "Purchase price in USD (fixed tiers). STAFF ACCOUNTS ONLY — silently ignored for " +
+        "non-staff API keys. 50/100 are reserved for premium/series content.",
+    },
+    is_listed: {
+      type: "boolean",
+      description:
+        "Whether the quiz appears on the public marketplace. STAFF ACCOUNTS ONLY — silently " +
+        "ignored for non-staff API keys.",
+    },
   },
   required: ["title", "question_sets"],
 } as const
 
 const LIST_QUIZZES_SCHEMA = {
   type: "object",
-  properties: {},
+  properties: {
+    q: {
+      type: "string",
+      description: "Search by quiz title or exact join code.",
+    },
+    category: {
+      type: "string",
+      description: "Filter by category slug (see create_quiz category list).",
+    },
+    page: {
+      type: "integer",
+      minimum: 1,
+      description: "Page number. Providing any filter/page switches to paginated responses.",
+    },
+    limit: {
+      type: "integer",
+      minimum: 1,
+      maximum: 100,
+      description: "Page size (default 20, max 100).",
+    },
+  },
 } as const
 
 const GET_QUIZ_SCHEMA = {
@@ -255,6 +315,36 @@ const UPDATE_QUIZ_SCHEMA = {
       type: ["string", "null"],
       description: "URL linked from the marketing text on the results page. Must be a valid URL. Pass null to clear.",
     },
+    category: {
+      type: ["string", "null"],
+      description:
+        "Category slug (kids-family, language-learning, holidays-occasions, geography, science, " +
+        "movies-tv, music, sports, history, business, technology, general-knowledge). Pass null to clear.",
+    },
+    age_group: {
+      type: "string",
+      enum: ["", "all_ages", "preschool", "kids_6_8", "kids_9_12", "teens", "adults"],
+      description: "Target age group. Pass empty string to clear.",
+    },
+    kid_safe: {
+      type: "boolean",
+      description: "Whether the quiz content is suitable for kids (defaults to false on creation).",
+    },
+    tags: {
+      type: "array",
+      items: { type: "string", maxLength: 30 },
+      maxItems: 10,
+      description: "Replaces the quiz's full tag set (≤10, normalized to lowercase slugs). Pass [] to clear.",
+    },
+    price: {
+      type: "number",
+      enum: [0, 5, 10, 20, 50, 100],
+      description: "Purchase price tier in USD. STAFF ONLY — non-staff requests are rejected with an error.",
+    },
+    is_listed: {
+      type: "boolean",
+      description: "Marketplace listing flag. STAFF ONLY — non-staff requests are rejected with an error.",
+    },
   },
   required: ["quiz_id"],
 } as const
@@ -264,7 +354,7 @@ const UPDATE_QUIZ_DESCRIPTION =
   "Pass quiz_id plus any subset of editable fields — omitted fields are left unchanged. " +
   "Editable fields: title, description, access_type, quiz_mode, auto_start_quiz, " +
   "negative_marking, start_datetime, end_datetime, max_plays_per_participant, " +
-  "marketing_text, marketing_link. " +
+  "marketing_text, marketing_link, category, age_group, kid_safe, tags, price (staff), is_listed (staff). " +
   "The join_code is immutable. Question sets, questions, and answers cannot be edited " +
   "through this tool — they require deleting and recreating the quiz. " +
   "Returns the updated quiz with a list of which fields actually changed."
@@ -281,6 +371,12 @@ const UPDATE_QUIZ_EDITABLE_FIELDS = [
   "max_plays_per_participant",
   "marketing_text",
   "marketing_link",
+  "category",
+  "age_group",
+  "kid_safe",
+  "tags",
+  "price",
+  "is_listed",
 ] as const
 
 const SHUFFLE_QUIZ_ANSWERS_SCHEMA = {
@@ -554,9 +650,12 @@ async function handleCreateQuiz(client: PlayQuizNowClient, args: Record<string, 
     questionset: questionSets,
   }
 
-  for (const field of ["start_datetime", "end_datetime", "marketing_text", "marketing_link", "max_plays_per_participant"]) {
+  for (const field of ["start_datetime", "end_datetime", "marketing_text", "marketing_link", "max_plays_per_participant", "category", "age_group", "price"]) {
     if (args[field] != null) data[field] = args[field]
   }
+  if (typeof args.kid_safe === "boolean") data.kid_safe = args.kid_safe
+  if (typeof args.is_listed === "boolean") data.is_listed = args.is_listed
+  if (Array.isArray(args.tags) && args.tags.length > 0) data.tags = args.tags
 
   const result = await client.createQuiz(data)
 
@@ -593,29 +692,40 @@ async function handleCreateQuiz(client: PlayQuizNowClient, args: Record<string, 
   return [{ type: "text", text: `Failed to create quiz: ${errors}` }]
 }
 
-async function handleListMyQuizzes(client: PlayQuizNowClient): Promise<TextContent[]> {
-  const result = await client.listMyQuizzes()
+async function handleListMyQuizzes(client: PlayQuizNowClient, args: Record<string, any> = {}): Promise<TextContent[]> {
+  const params: Record<string, string | number> = {}
+  for (const field of ["q", "category", "page", "limit"]) {
+    if (args[field] != null && args[field] !== "") params[field] = args[field]
+  }
+  const result = await client.listMyQuizzes(params)
 
   let quizzes: any[] = []
+  let meta: Record<string, any> | null = null
   if (Array.isArray(result)) {
     quizzes = result
   } else if (result && typeof result === "object") {
     const r = result as Record<string, any>
     quizzes = (r.results ?? r.data ?? []) as any[]
+    if (r.meta && typeof r.meta === "object") meta = r.meta
   }
 
   if (quizzes.length === 0) {
     return [{ type: "text", text: "No quizzes found." }]
   }
 
-  const lines = [`Found ${quizzes.length} quiz(es):\n`]
+  const header = meta
+    ? `Showing ${quizzes.length} of ${meta.total} quiz(es) (page ${meta.page}):\n`
+    : `Found ${quizzes.length} quiz(es):\n`
+  const lines = [header]
   for (const q of quizzes) {
     const title = q.title ?? "Untitled"
     const joinCode = q.join_code ?? "—"
     const mode = q.quiz_mode ?? "—"
     const quizId = q.id ?? "—"
-    lines.push(`- **${title}** (ID: ${quizId}, Code: ${joinCode}, Mode: ${mode})`)
+    const cat = q.category?.slug ? `, Category: ${q.category.slug}` : ""
+    lines.push(`- **${title}** (ID: ${quizId}, Code: ${joinCode}, Mode: ${mode}${cat})`)
   }
+  if (meta?.has_next) lines.push(`\nMore pages available — pass page: ${(meta.page ?? 1) + 1}.`)
   return [{ type: "text", text: lines.join("\n") }]
 }
 
@@ -929,7 +1039,7 @@ export function registerQuizTools(server: Server, client: PlayQuizNowClient): vo
         case "create_quiz":
           return { content: await handleCreateQuiz(client, args) }
         case "list_my_quizzes":
-          return { content: await handleListMyQuizzes(client) }
+          return { content: await handleListMyQuizzes(client, args) }
         case "get_quiz":
           return { content: await handleGetQuiz(client, args) }
         case "delete_quiz":
