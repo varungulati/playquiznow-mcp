@@ -480,26 +480,31 @@ const TOOLS: Tool[] = [
       "The correct answer's display position is randomized automatically — you don't need to shuffle the answers array yourself. " +
       `Returns the quiz join code and URL. Limits: max ${MAX_TOTAL_QUESTIONS} questions total, max ${MAX_QUESTION_SETS} question sets.`,
     inputSchema: CREATE_QUIZ_SCHEMA as unknown as Tool["inputSchema"],
+    annotations: { title: "Create quiz", readOnlyHint: false, destructiveHint: false, openWorldHint: false },
   },
   {
     name: "list_my_quizzes",
     description: "List all quizzes created by the authenticated user on PlayQuizNow.",
     inputSchema: LIST_QUIZZES_SCHEMA as unknown as Tool["inputSchema"],
+    annotations: { title: "List my quizzes", readOnlyHint: true, openWorldHint: false },
   },
   {
     name: "get_quiz",
     description: "Get full details of a quiz by its join code, including all questions and answers.",
     inputSchema: GET_QUIZ_SCHEMA as unknown as Tool["inputSchema"],
+    annotations: { title: "Get quiz details", readOnlyHint: true, openWorldHint: false },
   },
   {
     name: "delete_quiz",
     description: "Delete a quiz by its ID. Only the quiz owner can delete it.",
     inputSchema: DELETE_QUIZ_SCHEMA as unknown as Tool["inputSchema"],
+    annotations: { title: "Delete quiz", readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   },
   {
     name: "update_quiz",
     description: UPDATE_QUIZ_DESCRIPTION,
     inputSchema: UPDATE_QUIZ_SCHEMA as unknown as Tool["inputSchema"],
+    annotations: { title: "Update quiz", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
   {
     name: "shuffle_quiz_answers",
@@ -509,6 +514,7 @@ const TOOLS: Tool[] = [
       "Answer IDs are preserved, so existing play history (UserQuizResult rows) stays valid — only the rendered order changes. " +
       "Quiz-level join codes and metadata are untouched. Only the quiz owner can run this.",
     inputSchema: SHUFFLE_QUIZ_ANSWERS_SCHEMA as unknown as Tool["inputSchema"],
+    annotations: { title: "Shuffle answer order", readOnlyHint: false, destructiveHint: false, openWorldHint: false },
   },
   {
     name: "set_quiz_image",
@@ -516,6 +522,7 @@ const TOOLS: Tool[] = [
       "Set (or clear) the quiz banner image by URL. The server downloads the image from `image_url`, validates that it's a real image (png/jpeg/gif/webp, ≤10MB) from a public host, uploads it to S3, and saves the resulting path on the quiz. " +
       "Pass image_url=null to clear an existing image. Only the quiz owner can run this.",
     inputSchema: SET_QUIZ_IMAGE_SCHEMA as unknown as Tool["inputSchema"],
+    annotations: { title: "Set quiz cover image", readOnlyHint: false, destructiveHint: false, openWorldHint: true },
   },
   {
     name: "set_question_timing",
@@ -525,6 +532,7 @@ const TOOLS: Tool[] = [
       "Use question_ids to restrict to specific questions, or omit to apply to ALL questions in the quiz. " +
       "Only the quiz owner can run this. Returns questions_updated and the list of fields that were changed.",
     inputSchema: SET_QUESTION_TIMING_SCHEMA as unknown as Tool["inputSchema"],
+    annotations: { title: "Set question timing", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
   {
     name: "set_question_images",
@@ -535,6 +543,7 @@ const TOOLS: Tool[] = [
       "Pass image_url=null to clear: every targeted question with an existing attachment has its attachment cleared (only_if_empty is ignored in this mode). " +
       "Use question_ids to restrict the update to specific questions. Only the quiz owner can run this.",
     inputSchema: SET_QUESTION_IMAGES_SCHEMA as unknown as Tool["inputSchema"],
+    annotations: { title: "Set question images", readOnlyHint: false, destructiveHint: false, openWorldHint: true },
   },
 ]
 
