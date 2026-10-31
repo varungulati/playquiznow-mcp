@@ -5,7 +5,25 @@
 
 An [MCP (Model Context Protocol)](https://modelcontextprotocol.io) server for [PlayQuizNow](https://playquiznow.com) — the online quiz platform for education, training, and live events.
 
-This server lets AI assistants like **Claude Desktop**, **Claude Code**, and other MCP-compatible tools create and manage quizzes directly on PlayQuizNow.
+This server lets AI assistants like **claude.ai**, **ChatGPT**, **Claude Desktop**, **Claude Code**, and other MCP-compatible tools create and manage quizzes directly on PlayQuizNow.
+
+## Quick start — hosted server (recommended, no install)
+
+Add the remote server and sign in when prompted (OAuth — no API key needed):
+
+```
+https://mcp.playquiznow.com/mcp
+```
+
+- **claude.ai / Claude mobile:** Settings → Connectors → Add custom connector → paste the URL
+- **ChatGPT:** Settings → Apps & Connectors → enable Developer mode → Create → paste the URL
+- **Claude Code:**
+
+```bash
+claude mcp add --transport http playquiznow https://mcp.playquiznow.com/mcp
+```
+
+Prefer a key? Use `https://mcp.playquiznow.com/k/<your-api-key>/mcp` (create keys at [playquiznow.com/api-keys](https://playquiznow.com/api-keys)), or run locally via npx — see [Local install](#local-install-npx) below.
 
 ## What can it do?
 
@@ -35,7 +53,7 @@ Once connected, just ask your AI assistant:
 - *"Change the description of quiz 574 to 'Updated Q3 onboarding quiz'"*
 - *"Make quiz 612 private and set it to close on 2026-12-31"*
 
-## Quick Start
+## Local install (npx)
 
 ### 1. Get an API Key
 
