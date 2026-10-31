@@ -29,8 +29,36 @@ import { registerQuizTools } from "./tools/quiz.js"
 
 const PORT = Number(process.env.PORT || 8300)
 const BASE_URL = (process.env.PLAYQUIZNOW_BASE_URL ?? "https://api.playquiznow.com").replace(/\/+$/, "")
-const SERVER_VERSION = "0.6.0"
+const MCP_ORIGIN = process.env.MCP_ORIGIN ?? "https://mcp.playquiznow.com"
+const FRONTEND_URL = process.env.FRONTEND_URL ?? "https://playquiznow.com"
+const SERVER_VERSION = "0.6.1"
 const startedAt = Date.now()
+
+// OAuth discovery documents. The authorization server lives on the Django
+// API; these mirrors exist because MCP clients probe the MCP origin first.
+const PROTECTED_RESOURCE_METADATA = {
+  resource: `${MCP_ORIGIN}/mcp`,
+  authorization_servers: [BASE_URL],
+  scopes_supported: ["quizzes"],
+  bearer_methods_supported: ["header"],
+  resource_documentation: `${FRONTEND_URL}/api-keys`,
+}
+
+const AUTHORIZATION_SERVER_METADATA = {
+  issuer: BASE_URL,
+  authorization_endpoint: `${FRONTEND_URL}/oauth/consent`,
+  token_endpoint: `${BASE_URL}/api/oauth/token/`,
+  registration_endpoint: `${BASE_URL}/api/oauth/register/`,
+  revocation_endpoint: `${BASE_URL}/api/oauth/revoke/`,
+  response_types_supported: ["code"],
+  grant_types_supported: ["authorization_code", "refresh_token"],
+  code_challenge_methods_supported: ["S256"],
+  token_endpoint_auth_methods_supported: ["none"],
+  scopes_supported: ["quizzes"],
+}
+
+const WWW_AUTHENTICATE =
+  `Bearer resource_metadata="${MCP_ORIGIN}/.well-known/oauth-protected-resource"`
 
 // ---------------------------------------------------------------------------
 // Observability: structured JSON lines on stdout + in-memory counters
@@ -68,10 +96,37 @@ function extractBearer(req: Request): string | null {
   return null
 }
 
+// 60s validity cache so the preflight adds ~zero steady-state latency.
+const tokenCache = new Map<string, { valid: boolean; until: number }>()
+const TOKEN_CACHE_TTL_MS = 60_000
+const TOKEN_CACHE_MAX = 2000
+
+async function isTokenValid(apiKey: string): Promise<boolean> {
+  const now = Date.now()
+  const cached = tokenCache.get(apiKey)
+  if (cached && cached.until > now) return cached.valid
+  let valid = false
+  try {
+    const resp = await fetch(`${BASE_URL}/api/auth/key-check/`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(5000),
+    })
+    if (resp.status === 401 || resp.status === 403) valid = false
+    else if (resp.ok) valid = true
+    else return true // backend hiccup — don't block the call on it
+  } catch {
+    return true // network error — fail open, the real call will surface it
+  }
+  if (tokenCache.size >= TOKEN_CACHE_MAX) tokenCache.clear()
+  tokenCache.set(apiKey, { valid, until: now + TOKEN_CACHE_TTL_MS })
+  return valid
+}
+
 async function handleMcpRequest(req: Request, res: Response, apiKey: string | null): Promise<void> {
   if (!apiKey || !apiKey.startsWith("pqn_")) {
     stats.unauthorized += 1
     log({ evt: "unauthorized", path: redactPath(req.path), ip: req.ip })
+    res.setHeader("WWW-Authenticate", WWW_AUTHENTICATE)
     res.status(401).json({
       jsonrpc: "2.0",
       error: {
@@ -81,6 +136,22 @@ async function handleMcpRequest(req: Request, res: Response, apiKey: string | nu
           "or use https://mcp.playquiznow.com/k/<your-key>/mcp. " +
           "Get a key at https://playquiznow.com/api-keys",
       },
+      id: null,
+    })
+    return
+  }
+
+  // Pre-flight the token for tool calls so an expired/revoked OAuth token
+  // (or revoked API key) surfaces as a proper HTTP 401 — that status is what
+  // makes clients run token refresh / re-auth. Cached 60s per token.
+  const method = (req.body as any)?.method
+  if (method === "tools/call" && !(await isTokenValid(apiKey))) {
+    stats.unauthorized += 1
+    log({ evt: "token_invalid", key: keyTag(apiKey) })
+    res.setHeader("WWW-Authenticate", WWW_AUTHENTICATE)
+    res.status(401).json({
+      jsonrpc: "2.0",
+      error: { code: -32001, message: "Token expired or revoked — re-authenticate." },
       id: null,
     })
     return
@@ -152,6 +223,14 @@ app.use((req, res, next) => {
   next()
 })
 
+// OAuth discovery (clients probe the MCP origin for these)
+app.get("/.well-known/oauth-protected-resource", (_req, res) => {
+  res.json(PROTECTED_RESOURCE_METADATA)
+})
+app.get("/.well-known/oauth-authorization-server", (_req, res) => {
+  res.json(AUTHORIZATION_SERVER_METADATA)
+})
+
 app.get("/health", (_req, res) => {
   res.json({
     status: "ok",
@@ -196,8 +275,8 @@ app.get("/", (_req, res) => {
     .send(
       "PlayQuizNow MCP server\n\n" +
         "Connect from claude.ai / ChatGPT / Cursor:\n" +
-        "  URL:  https://mcp.playquiznow.com/k/<your-api-key>/mcp\n" +
-        "  (or POST /mcp with Authorization: Bearer <your-api-key>)\n\n" +
+        "  URL:  https://mcp.playquiznow.com/mcp   (OAuth — sign in when prompted)\n" +
+        "  or:   https://mcp.playquiznow.com/k/<your-api-key>/mcp\n\n" +
         "Get an API key: https://playquiznow.com/api-keys\n" +
         "Docs: https://playquiznow.com/integrations/mcp\n",
     )
