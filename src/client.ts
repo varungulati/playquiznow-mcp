@@ -87,6 +87,18 @@ export class PlayQuizNowClient {
       const value = data[field]
       if (value) form.append(field, String(value))
     }
+
+    // Catalog fields (v0.6.3 fix: the schema advertised these since 0.5.0
+    // but they were never appended — AI-created quizzes arrived uncategorized)
+    if (data.category != null) form.append("category", String(data.category))
+    if (data.kid_safe != null) form.append("kid_safe", data.kid_safe ? "true" : "false")
+    if (data.age_group) form.append("age_group", String(data.age_group))
+    if (Array.isArray(data.tags) && data.tags.length > 0) {
+      form.append("tags", JSON.stringify(data.tags))
+    }
+    // staff-only on the server; silently ignored for non-staff accounts
+    if (data.price != null) form.append("price", String(data.price))
+    if (data.is_listed != null) form.append("is_listed", data.is_listed ? "true" : "false")
     if (data.max_plays_per_participant != null) {
       form.append("max_plays_per_participant", String(data.max_plays_per_participant))
     }
