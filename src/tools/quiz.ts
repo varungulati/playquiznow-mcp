@@ -1027,14 +1027,27 @@ async function handleDeleteQuiz(client: PlayQuizNowClient, args: Record<string, 
   return [{ type: "text", text: `Failed to delete quiz: ${typeof errors === "object" ? JSON.stringify(errors) : errors}` }]
 }
 
-export function registerQuizTools(server: Server, client: PlayQuizNowClient): void {
+/** Observability hook: called after every tool call (hosted server logs these). */
+export interface ToolCallInfo {
+  tool: string
+  ms: number
+  ok: boolean
+  error?: string
+}
+
+export function registerQuizTools(
+  server: Server,
+  client: PlayQuizNowClient,
+  onToolCall?: (info: ToolCallInfo) => void,
+): void {
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }))
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: rawArgs } = request.params
     const args = (rawArgs ?? {}) as Record<string, any>
+    const startedAt = Date.now()
 
-    try {
+    const run = async (): Promise<{ content: any }> => {
       switch (name) {
         case "create_quiz":
           return { content: await handleCreateQuiz(client, args) }
@@ -1057,9 +1070,16 @@ export function registerQuizTools(server: Server, client: PlayQuizNowClient): vo
         default:
           return { content: [{ type: "text", text: `Unknown tool: ${name}` }] }
       }
+    }
+
+    try {
+      const result = await run()
+      onToolCall?.({ tool: name, ms: Date.now() - startedAt, ok: true })
+      return result
     } catch (e: any) {
       const errorType = e?.constructor?.name ?? "Error"
       const message = e?.message ?? String(e)
+      onToolCall?.({ tool: name, ms: Date.now() - startedAt, ok: false, error: message })
       return { content: [{ type: "text", text: `Error (${errorType}): ${message}` }] }
     }
   })

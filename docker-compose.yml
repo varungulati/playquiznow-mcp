@@ -1,0 +1,21 @@
+# Hosted MCP endpoint. Runs beside the backend stack on the droplet;
+# host nginx proxies mcp.playquiznow.com → 127.0.0.1:8300.
+services:
+  mcp:
+    build: .
+    image: playquiznow-mcp:latest
+    ports:
+      - "127.0.0.1:8300:8300"
+    environment:
+      - PORT=8300
+      - PLAYQUIZNOW_BASE_URL=https://api.playquiznow.com
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 150M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

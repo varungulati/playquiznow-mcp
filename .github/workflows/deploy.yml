@@ -1,0 +1,35 @@
+name: Deploy hosted MCP to Droplet
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to Droplet via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DROPLET_IP }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            cd /root/playquiznow-mcp || git clone https://github.com/varungulati/playquiznow-mcp.git /root/playquiznow-mcp
+            cd /root/playquiznow-mcp
+            git pull origin main
+            docker compose build mcp
+            docker compose up -d
+            # Health gate: fail the deploy if the new container doesn't come up
+            for i in $(seq 1 15); do
+              sleep 2
+              if curl -sf http://127.0.0.1:8300/health > /dev/null; then
+                echo "MCP server healthy."
+                exit 0
+              fi
+            done
+            echo "MCP server failed health check" >&2
+            docker compose logs --tail 50 mcp >&2
+            exit 1
