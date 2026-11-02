@@ -93,6 +93,10 @@ export class PlayQuizNowClient {
     if (data.category != null) form.append("category", String(data.category))
     if (data.kid_safe != null) form.append("kid_safe", data.kid_safe ? "true" : "false")
     if (data.age_group) form.append("age_group", String(data.age_group))
+    if (data.theme) form.append("theme", String(data.theme))
+    if (Array.isArray(data.embed_domains)) {
+      form.append("embed_domains", JSON.stringify(data.embed_domains))
+    }
     if (Array.isArray(data.tags) && data.tags.length > 0) {
       form.append("tags", JSON.stringify(data.tags))
     }

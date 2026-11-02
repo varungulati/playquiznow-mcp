@@ -177,6 +177,21 @@ const CREATE_QUIZ_SCHEMA = {
       description:
         "Target age group: preschool (3-5), kids_6_8, kids_9_12, teens (13-17), adults (18+), or all_ages.",
     },
+    theme: {
+      type: "string",
+      enum: ["default", "arcade", "ocean", "jungle", "space", "candy", "chalkboard", "festive", "boardroom"],
+      description:
+        "Visual theme; default is the standard look. Players see it in the lobby and during the game. " +
+        "Suggestions: candy or jungle for young kids, chalkboard for classrooms, festive for holidays, " +
+        "boardroom for workplace quizzes, arcade or space for games and parties.",
+    },
+    embed_domains: {
+      type: "array",
+      items: { type: "string", maxLength: 255 },
+      maxItems: 20,
+      description:
+        "Sites allowed to embed this quiz, such as example.com or *.example.com. A private quiz only plays on sites listed here; a public quiz is unrestricted until a site is listed. Links from learning platforms and Google Classroom work without being listed.",
+    },
     kid_safe: {
       type: "boolean",
       description:
@@ -326,6 +341,21 @@ const UPDATE_QUIZ_SCHEMA = {
       enum: ["", "all_ages", "preschool", "kids_6_8", "kids_9_12", "teens", "adults"],
       description: "Target age group. Pass empty string to clear.",
     },
+    theme: {
+      type: "string",
+      enum: ["default", "arcade", "ocean", "jungle", "space", "candy", "chalkboard", "festive", "boardroom"],
+      description:
+        "Visual theme. Players see it in the lobby and during the game. " +
+        "Suggestions: candy or jungle for young kids, chalkboard for classrooms, festive for holidays, " +
+        "boardroom for workplace quizzes, arcade or space for games and parties.",
+    },
+    embed_domains: {
+      type: "array",
+      items: { type: "string", maxLength: 255 },
+      maxItems: 20,
+      description:
+        "Replaces the list of sites allowed to embed this quiz, such as example.com or *.example.com. A private quiz only plays on sites listed here. Pass [] to clear.",
+    },
     kid_safe: {
       type: "boolean",
       description: "Whether the quiz content is suitable for kids (defaults to false on creation).",
@@ -354,7 +384,7 @@ const UPDATE_QUIZ_DESCRIPTION =
   "Pass quiz_id plus any subset of editable fields — omitted fields are left unchanged. " +
   "Editable fields: title, description, access_type, quiz_mode, auto_start_quiz, " +
   "negative_marking, start_datetime, end_datetime, max_plays_per_participant, " +
-  "marketing_text, marketing_link, category, age_group, kid_safe, tags, price (staff), is_listed (staff). " +
+  "marketing_text, marketing_link, category, age_group, kid_safe, theme, embed_domains, tags, price (staff), is_listed (staff). " +
   "The join_code is immutable. Question sets, questions, and answers cannot be edited " +
   "through this tool — they require deleting and recreating the quiz. " +
   "Returns the updated quiz with a list of which fields actually changed."
@@ -374,6 +404,8 @@ const UPDATE_QUIZ_EDITABLE_FIELDS = [
   "category",
   "age_group",
   "kid_safe",
+  "theme",
+  "embed_domains",
   "tags",
   "price",
   "is_listed",
@@ -663,6 +695,8 @@ async function handleCreateQuiz(client: PlayQuizNowClient, args: Record<string, 
     if (args[field] != null) data[field] = args[field]
   }
   if (typeof args.kid_safe === "boolean") data.kid_safe = args.kid_safe
+  if (typeof args.theme === "string") data.theme = args.theme
+  if (Array.isArray(args.embed_domains)) data.embed_domains = args.embed_domains
   if (typeof args.is_listed === "boolean") data.is_listed = args.is_listed
   if (Array.isArray(args.tags) && args.tags.length > 0) data.tags = args.tags
 
