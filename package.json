@@ -1,6 +1,6 @@
 {
   "name": "playquiznow-mcp",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "MCP server for PlayQuizNow \u2014 create and manage quizzes from AI tools like Claude Desktop",
   "type": "module",
   "main": "./dist/index.js",

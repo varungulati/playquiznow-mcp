@@ -175,6 +175,25 @@ export class PlayQuizNowClient {
     })
   }
 
+  async searchQuestionLibrary(params: Record<string, string | number>): Promise<ParsedResponse> {
+    const qs = new URLSearchParams()
+    for (const [k, v] of Object.entries(params)) qs.set(k, String(v))
+    return this.request(`/api/quiz/question-library/?${qs.toString()}`, {
+      headers: { Authorization: `Bearer ${this.apiKey}` },
+    })
+  }
+
+  async getLibraryQuestions(ids: number[]): Promise<ParsedResponse> {
+    return this.request("/api/quiz/question-library/copy/", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ ids }),
+    })
+  }
+
   async setQuizImage(quizId: number, imageUrl: string | null): Promise<ParsedResponse> {
     return this.request(`/api/quiz/${quizId}/set-image/`, {
       method: "POST",

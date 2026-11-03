@@ -34,6 +34,8 @@ Prefer a key? Use `https://mcp.playquiznow.com/k/<your-api-key>/mcp` (create key
 | `get_quiz` | Get full quiz details by join code |
 | `update_quiz` | Edit an existing quiz's metadata (title, description, access, schedule, etc.) — keeps the join code |
 | `delete_quiz` | Delete a quiz by ID |
+| `search_question_library` | Find ready-made questions from official free quizzes by words and category |
+| `get_library_questions` | Get complete library questions, ready to pass to `create_quiz` |
 
 #### `update_quiz` — what's editable
 

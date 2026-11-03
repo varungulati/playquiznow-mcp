@@ -531,6 +531,9 @@ const SET_QUESTION_IMAGES_SCHEMA = {
   required: ["quiz_id", "image_url"],
 } as const
 
+const LIBRARY_CATEGORIES =
+  "kids-family, language-learning, holidays-occasions, geography, science, movies-tv, music, sports, history, business, technology, general-knowledge"
+
 const TOOLS: Tool[] = [
   {
     name: "get_video_questions",
@@ -548,6 +551,44 @@ const TOOLS: Tool[] = [
       required: ["url"],
     } as unknown as Tool["inputSchema"],
     annotations: { title: "Write questions from a video", readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+  },
+  {
+    name: "search_question_library",
+    description:
+      "Search PlayQuizNow's library of ready-made questions from official free quizzes, by words and category. " +
+      "Results list the options but never mark the right answer. Difficulty is easy, medium or hard once enough " +
+      "people have answered, otherwise null. To use questions, pass their ids to get_library_questions.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        q: { type: "string", description: "Words to find in the question text" },
+        category: { type: "string", description: `Category slug. One of: ${LIBRARY_CATEGORIES}` },
+        page: { type: "integer", minimum: 1, description: "Page of results. Default 1." },
+        limit: { type: "integer", minimum: 1, maximum: 50, description: "Results per page. Default 20." },
+      },
+    } as unknown as Tool["inputSchema"],
+    annotations: { title: "Search question library", readOnlyHint: true, openWorldHint: false },
+  },
+  {
+    name: "get_library_questions",
+    description:
+      "Get complete library questions, including right answers, in the format create_quiz and update_quiz accept. " +
+      "These are copies, so editing them never changes the original. If a question has image_url, create the quiz " +
+      "first, then pass that link to set_question_images. Up to 50 ids a call, limited to 60 calls an hour.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ids: {
+          type: "array",
+          items: { type: "integer" },
+          minItems: 1,
+          maxItems: 50,
+          description: "Question ids from search_question_library",
+        },
+      },
+      required: ["ids"],
+    } as unknown as Tool["inputSchema"],
+    annotations: { title: "Get library questions", readOnlyHint: true, openWorldHint: false },
   },
   {
     name: "create_quiz",
@@ -955,6 +996,47 @@ async function handleGetVideoQuestions(
   return [{ type: "text", text: JSON.stringify(result.data ?? result, null, 2) }]
 }
 
+async function handleSearchQuestionLibrary(
+  client: PlayQuizNowClient,
+  args: Record<string, any>,
+): Promise<TextContent[]> {
+  const params: Record<string, string | number> = {}
+  for (const key of ["q", "category", "page", "limit"]) {
+    if (args[key] !== undefined && args[key] !== "") params[key] = args[key]
+  }
+  const result = await client.searchQuestionLibrary(params)
+  if (!result.status) return [{ type: "text", text: JSON.stringify(result, null, 2) }]
+  const { data, meta } = result as Record<string, any>
+  return [{ type: "text", text: JSON.stringify({ total: meta?.total, page: meta?.page, has_next: meta?.has_next, questions: data }, null, 2) }]
+}
+
+async function handleGetLibraryQuestions(
+  client: PlayQuizNowClient,
+  args: Record<string, any>,
+): Promise<TextContent[]> {
+  const ids = args.ids
+  if (!Array.isArray(ids) || ids.length === 0 || ids.length > 50 || !ids.every((id) => Number.isInteger(id))) {
+    return [{ type: "text", text: "Validation error: ids must be a list of 1 to 50 question ids." }]
+  }
+  const result = await client.getLibraryQuestions(ids)
+  if (!result.status) return [{ type: "text", text: JSON.stringify(result, null, 2) }]
+  const questions = ((result as Record<string, any>).data ?? []).map((question: Record<string, any>) => ({
+    text: question.text,
+    question_type: question.question_type,
+    answers: (question.answer ?? []).map((answer: Record<string, any>) => ({
+      text: answer.text,
+      is_correct: answer.is_correct,
+    })),
+    positive_points: Number(question.positive_points),
+    negative_points: Number(question.negative_points),
+    time_for_question: question.time_for_question,
+    time_for_answer: question.time_for_answer,
+    correct_answer_explanation: question.correct_answer_explanation || undefined,
+    image_url: question.attachment || undefined,
+  }))
+  return [{ type: "text", text: JSON.stringify(questions, null, 2) }]
+}
+
 async function handleSetQuizImage(
   client: PlayQuizNowClient,
   args: Record<string, any>,
@@ -1152,6 +1234,10 @@ export function registerQuizTools(
       switch (name) {
         case "get_video_questions":
           return { content: await handleGetVideoQuestions(client, args as Record<string, any>) }
+        case "search_question_library":
+          return { content: await handleSearchQuestionLibrary(client, args) }
+        case "get_library_questions":
+          return { content: await handleGetLibraryQuestions(client, args) }
         case "create_quiz":
           return { content: await handleCreateQuiz(client, args) }
         case "list_my_quizzes":
