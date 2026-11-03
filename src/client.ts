@@ -94,6 +94,8 @@ export class PlayQuizNowClient {
     if (data.kid_safe != null) form.append("kid_safe", data.kid_safe ? "true" : "false")
     if (data.age_group) form.append("age_group", String(data.age_group))
     if (data.theme) form.append("theme", String(data.theme))
+    if (data.leaderboard_mode) form.append("leaderboard_mode", String(data.leaderboard_mode))
+    if (data.video_url) form.append("video_url", String(data.video_url))
     if (Array.isArray(data.embed_domains)) {
       form.append("embed_domains", JSON.stringify(data.embed_domains))
     }
@@ -159,6 +161,17 @@ export class PlayQuizNowClient {
     return this.request(`/api/quiz/${quizId}/shuffle-answers/`, {
       method: "POST",
       headers: { Authorization: `Bearer ${this.apiKey}` },
+    })
+  }
+
+  async getVideoQuestions(url: string, count?: number): Promise<ParsedResponse> {
+    return this.request("/api/quiz/video-questions/", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ url, count }),
     })
   }
 

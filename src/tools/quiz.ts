@@ -177,6 +177,19 @@ const CREATE_QUIZ_SCHEMA = {
       description:
         "Target age group: preschool (3-5), kids_6_8, kids_9_12, teens (13-17), adults (18+), or all_ages.",
     },
+    leaderboard_mode: {
+      type: "string",
+      enum: ["live", "top5", "hidden"],
+      description:
+        "What players see during a live game: live shows all scores, top5 shows the top 5 and their own score, " +
+        "hidden shows no scores until the final results. Final results are never affected.",
+    },
+    video_url: {
+      type: "string",
+      description:
+        "YouTube link the quiz is about. Players watch it before starting, or in the lobby in a live game. " +
+        "It must be public and allow embedding. Prefer reputable sources and check the channel. Pass an empty string to remove it.",
+    },
     theme: {
       type: "string",
       enum: ["default", "arcade", "ocean", "jungle", "space", "candy", "chalkboard", "festive", "boardroom"],
@@ -341,6 +354,19 @@ const UPDATE_QUIZ_SCHEMA = {
       enum: ["", "all_ages", "preschool", "kids_6_8", "kids_9_12", "teens", "adults"],
       description: "Target age group. Pass empty string to clear.",
     },
+    leaderboard_mode: {
+      type: "string",
+      enum: ["live", "top5", "hidden"],
+      description:
+        "What players see during a live game: live shows all scores, top5 shows the top 5 and their own score, " +
+        "hidden shows no scores until the final results. Final results are never affected.",
+    },
+    video_url: {
+      type: "string",
+      description:
+        "YouTube link the quiz is about. Players watch it before starting, or in the lobby in a live game. " +
+        "It must be public and allow embedding. Prefer reputable sources and check the channel. Pass an empty string to remove it.",
+    },
     theme: {
       type: "string",
       enum: ["default", "arcade", "ocean", "jungle", "space", "candy", "chalkboard", "festive", "boardroom"],
@@ -405,6 +431,8 @@ const UPDATE_QUIZ_EDITABLE_FIELDS = [
   "age_group",
   "kid_safe",
   "theme",
+  "leaderboard_mode",
+  "video_url",
   "embed_domains",
   "tags",
   "price",
@@ -504,6 +532,23 @@ const SET_QUESTION_IMAGES_SCHEMA = {
 } as const
 
 const TOOLS: Tool[] = [
+  {
+    name: "get_video_questions",
+    description:
+      "Write quiz questions from a public YouTube video. PlayQuizNow's AI watches the video and returns questions " +
+      "ready to pass to create_quiz, with the video's title and channel. Then call create_quiz with those questions " +
+      "and video_url set to the same link. Check that the channel is a reputable source before using it. " +
+      "Limited to 20 calls a day per account. If this is not switched on, write the questions yourself and still pass video_url.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "YouTube video link" },
+        count: { type: "integer", minimum: 1, maximum: 20, description: "Number of questions. Default 8." },
+      },
+      required: ["url"],
+    } as unknown as Tool["inputSchema"],
+    annotations: { title: "Write questions from a video", readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+  },
   {
     name: "create_quiz",
     description:
@@ -696,6 +741,8 @@ async function handleCreateQuiz(client: PlayQuizNowClient, args: Record<string, 
   }
   if (typeof args.kid_safe === "boolean") data.kid_safe = args.kid_safe
   if (typeof args.theme === "string") data.theme = args.theme
+  if (typeof args.leaderboard_mode === "string") data.leaderboard_mode = args.leaderboard_mode
+  if (typeof args.video_url === "string") data.video_url = args.video_url
   if (Array.isArray(args.embed_domains)) data.embed_domains = args.embed_domains
   if (typeof args.is_listed === "boolean") data.is_listed = args.is_listed
   if (Array.isArray(args.tags) && args.tags.length > 0) data.tags = args.tags
@@ -897,6 +944,17 @@ async function handleShuffleQuizAnswers(
   return [{ type: "text", text: `Failed to shuffle answers: ${formatDrfFieldErrors(result.errors)}` }]
 }
 
+async function handleGetVideoQuestions(
+  client: PlayQuizNowClient,
+  args: Record<string, any>,
+): Promise<TextContent[]> {
+  if (typeof args.url !== "string" || !args.url.trim()) {
+    return [{ type: "text", text: "Validation error: url must be a YouTube link." }]
+  }
+  const result = await client.getVideoQuestions(args.url.trim(), args.count)
+  return [{ type: "text", text: JSON.stringify(result.data ?? result, null, 2) }]
+}
+
 async function handleSetQuizImage(
   client: PlayQuizNowClient,
   args: Record<string, any>,
@@ -1092,6 +1150,8 @@ export function registerQuizTools(
 
     const run = async (): Promise<{ content: any }> => {
       switch (name) {
+        case "get_video_questions":
+          return { content: await handleGetVideoQuestions(client, args as Record<string, any>) }
         case "create_quiz":
           return { content: await handleCreateQuiz(client, args) }
         case "list_my_quizzes":

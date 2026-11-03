@@ -37,7 +37,7 @@ Prefer a key? Use `https://mcp.playquiznow.com/k/<your-api-key>/mcp` (create key
 
 #### `update_quiz` — what's editable
 
-Pass `quiz_id` plus any subset of: `title`, `description`, `access_type`, `quiz_mode`, `auto_start_quiz`, `negative_marking`, `start_datetime`, `end_datetime`, `max_plays_per_participant`, `marketing_text`, `marketing_link`, `category`, `age_group`, `kid_safe`, `theme`, `embed_domains`, `tags`, `price` (staff only), `is_listed` (staff only). Omitted fields stay unchanged. The `join_code` is permanent and never changes.
+Pass `quiz_id` plus any subset of: `title`, `description`, `access_type`, `quiz_mode`, `auto_start_quiz`, `negative_marking`, `start_datetime`, `end_datetime`, `max_plays_per_participant`, `marketing_text`, `marketing_link`, `category`, `age_group`, `kid_safe`, `theme`, `leaderboard_mode`, `video_url`, `embed_domains`, `tags`, `price` (staff only), `is_listed` (staff only). Omitted fields stay unchanged. The `join_code` is permanent and never changes.
 
 **Question sets, questions, and answers are NOT editable** through `update_quiz` — to change those, delete the quiz and create a new one. (This loses the join code, leaderboard, and play history.)
 
@@ -108,6 +108,8 @@ The `create_quiz` tool supports all quiz configuration options:
 | `age_group` | string | — | all_ages / preschool / kids_6_8 / kids_9_12 / teens / adults |
 | `kid_safe` | boolean | `false` | Explicitly mark content as suitable for kids |
 | `theme` | string | `default` | Visual theme players see: `default`, `arcade`, `ocean`, `jungle`, `space`, `candy`, `chalkboard`, `festive`, `boardroom` |
+| `leaderboard_mode` | string | `live` | What players see during a game: `live`, `top5`, or `hidden` until the final results. |
+| `video_url` | string | none | Public YouTube link the quiz is about. Players watch it before starting, or in the lobby in a live game. |
 | `embed_domains` | string[] | `[]` | Sites allowed to embed the quiz, such as `example.com` or `*.example.com`. A private quiz only plays on listed sites |
 | `tags` | string[] | — | Up to 10 free tags (normalized), e.g. christmas, spanish-a1 |
 | `price` | number | `0` | Price tier 0/5/10/20/50/100 (staff accounts only) |
