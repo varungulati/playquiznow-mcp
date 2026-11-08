@@ -31,7 +31,7 @@ const PORT = Number(process.env.PORT || 8300)
 const BASE_URL = (process.env.PLAYQUIZNOW_BASE_URL ?? "https://api.playquiznow.com").replace(/\/+$/, "")
 const MCP_ORIGIN = process.env.MCP_ORIGIN ?? "https://mcp.playquiznow.com"
 const FRONTEND_URL = process.env.FRONTEND_URL ?? "https://playquiznow.com"
-const SERVER_VERSION = "0.8.0"
+const SERVER_VERSION = "0.8.1"
 const startedAt = Date.now()
 
 // OAuth discovery documents. The authorization server lives on the Django
