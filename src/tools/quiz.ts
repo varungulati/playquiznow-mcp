@@ -106,6 +106,18 @@ const CREATE_QUIZ_SCHEMA = {
                   description: "Explanation shown after answering. Plain text.",
                   default: "",
                 },
+                video_start: {
+                  type: "integer",
+                  description:
+                    "Only for quizzes with a video_url: second of the video where this question's clip starts. " +
+                    "Players watch the clip (video_start to video_end) before the question is shown. Set both or neither.",
+                  minimum: 0,
+                },
+                video_end: {
+                  type: "integer",
+                  description: "Second of the video where this question's clip ends (5 to 180 seconds after video_start).",
+                  minimum: 1,
+                },
               },
               required: ["text", "answers"],
             },
@@ -751,6 +763,10 @@ function transformQuestionSets(questionSets: any[]): any[] {
         time_for_answer: q.time_for_answer ?? 10,
         correct_answer_explanation: q.correct_answer_explanation ?? "",
         attachment: null,
+        // A clip of the quiz video that plays before this question (both or neither).
+        ...(typeof q.video_start === "number" && typeof q.video_end === "number" && q.video_end > q.video_start
+          ? { video_start: q.video_start, video_end: q.video_end }
+          : {}),
         answer: answers,
       }
     }),
